@@ -1,18 +1,18 @@
 # Bare-Metal
 
-In this tutorial, we'll network boot and provision a Kubernetes v1.11.1 cluster on bare-metal with Container Linux.
+In this tutorial, we'll network boot and provision a Kubernetes v1.15.3 cluster on bare-metal with Container Linux.
 
-First, we'll deploy a [Matchbox](https://github.com/coreos/matchbox) service and setup a network boot environment. Then, we'll declare a Kubernetes cluster using the Typhoon Terraform module and power on machines. On PXE boot, machines will install Container Linux to disk, reboot into the disk install, and provision themselves as Kubernetes controllers or workers via Ignition.
+First, we'll deploy a [Matchbox](https://github.com/poseidon/matchbox) service and setup a network boot environment. Then, we'll declare a Kubernetes cluster using the Typhoon Terraform module and power on machines. On PXE boot, machines will install Container Linux to disk, reboot into the disk install, and provision themselves as Kubernetes controllers or workers via Ignition.
 
 Controllers are provisioned to run an `etcd-member` peer and a `kubelet` service. Workers run just a `kubelet` service. A one-time [bootkube](https://github.com/kubernetes-incubator/bootkube) bootstrap schedules the `apiserver`, `scheduler`, `controller-manager`, and `coredns` on controllers and schedules `kube-proxy` and `calico` (or `flannel`) on every node. A generated `kubeconfig` provides `kubectl` access to the cluster.
 
 ## Requirements
 
 * Machines with 2GB RAM, 30GB disk, PXE-enabled NIC, IPMI
-* PXE-enabled [network boot](https://coreos.com/matchbox/docs/latest/network-setup.html) environment
+* PXE-enabled [network boot](https://coreos.com/matchbox/docs/latest/network-setup.html) environment (with HTTPS support)
 * Matchbox v0.6+ deployment with API enabled
 * Matchbox credentials `client.crt`, `client.key`, `ca.crt`
-* Terraform v0.11.x and [terraform-provider-matchbox](https://github.com/coreos/terraform-provider-matchbox) installed locally
+* Terraform v0.12.x, [terraform-provider-matchbox](https://github.com/poseidon/terraform-provider-matchbox), and [terraform-provider-ct](https://github.com/poseidon/terraform-provider-ct) installed locally
 
 ## Machines
 
@@ -82,7 +82,7 @@ $ openssl s_client -connect matchbox.example.com:8081 \
 
 ## PXE Environment
 
-Create a iPXE-enabled network boot environment. Configure PXE clients to chainload [iPXE](http://ipxe.org/cmd) and instruct iPXE clients to chainload from your Matchbox service's `/boot.ipxe` endpoint.
+Create an iPXE-enabled network boot environment. Configure PXE clients to chainload [iPXE](http://ipxe.org/cmd) firmware compiled to support [HTTPS downloads](https://ipxe.org/crypto). Instruct iPXE clients to chainload from your Matchbox service's `/boot.ipxe` endpoint.
 
 For networks already supporting iPXE clients, you can add a `default.ipxe` config.
 
@@ -91,9 +91,7 @@ For networks already supporting iPXE clients, you can add a `default.ipxe` confi
 chain http://matchbox.foo:8080/boot.ipxe
 ```
 
-For networks with Ubiquiti Routers, you can [configure the router](/topics/hardware.md#ubiquiti) itself to chainload machines to iPXE and Matchbox.
-
-For a small lab, you may wish to checkout the [quay.io/coreos/dnsmasq](https://quay.io/repository/coreos/dnsmasq) container image and [copy-paste examples](https://github.com/coreos/matchbox/blob/master/Documentation/network-setup.md#coreosdnsmasq).
+For networks with Ubiquiti Routers, you can [configure the router](/topics/hardware/#ubiquiti) itself to chainload machines to iPXE and Matchbox.
 
 Read about the [many ways](https://coreos.com/matchbox/docs/latest/network-setup.html) to setup a compliant iPXE-enabled network. There is quite a bit of flexibility:
 
@@ -104,32 +102,35 @@ Read about the [many ways](https://coreos.com/matchbox/docs/latest/network-setup
 !!! note ""
     TFTP chainloading to modern boot firmware, like iPXE, avoids issues with old NICs and allows faster transfer protocols like HTTP to be used.
 
+!!! warning
+    Compile iPXE from [source](https://github.com/ipxe/ipxe) with support for [HTTPS downloads](https://ipxe.org/crypto). iPXE's pre-built firmware binaries do not enable this. If you cannot enable HTTPS downloads, set `download_protocol = "http"` (discouraged).
+
 ## Terraform Setup
 
-Install [Terraform](https://www.terraform.io/downloads.html) v0.11.x on your system.
+Install [Terraform](https://www.terraform.io/downloads.html) v0.12.x on your system.
 
 ```sh
 $ terraform version
-Terraform v0.11.1
+Terraform v0.12.7
 ```
 
-Add the [terraform-provider-matchbox](https://github.com/coreos/terraform-provider-matchbox) plugin binary for your system.
+Add the [terraform-provider-matchbox](https://github.com/poseidon/terraform-provider-matchbox) plugin binary for your system to `~/.terraform.d/plugins/`, noting the final name.
 
 ```sh
-wget https://github.com/coreos/terraform-provider-matchbox/releases/download/v0.2.2/terraform-provider-matchbox-v0.2.2-linux-amd64.tar.gz
-tar xzf terraform-provider-matchbox-v0.2.2-linux-amd64.tar.gz
-sudo mv terraform-provider-matchbox-v0.2.2-linux-amd64/terraform-provider-matchbox /usr/local/bin/
+wget https://github.com/poseidon/terraform-provider-matchbox/releases/download/v0.3.0/terraform-provider-matchbox-v0.3.0-linux-amd64.tar.gz
+tar xzf terraform-provider-matchbox-v0.3.0-linux-amd64.tar.gz
+mv terraform-provider-matchbox-v0.3.0-linux-amd64/terraform-provider-matchbox ~/.terraform.d/plugins/terraform-provider-matchbox_v0.3.0
 ```
 
-Add the plugin to your `~/.terraformrc`.
+Add the [terraform-provider-ct](https://github.com/poseidon/terraform-provider-ct) plugin binary for your system to `~/.terraform.d/plugins/`, noting the final name.
 
-```
-providers {
-  matchbox = "/usr/local/bin/terraform-provider-matchbox"
-}
+```sh
+wget https://github.com/poseidon/terraform-provider-ct/releases/download/v0.4.0/terraform-provider-ct-v0.4.0-linux-amd64.tar.gz
+tar xzf terraform-provider-ct-v0.4.0-linux-amd64.tar.gz
+mv terraform-provider-ct-v0.4.0-linux-amd64/terraform-provider-ct ~/.terraform.d/plugins/terraform-provider-ct_v0.4.0
 ```
 
-Read [concepts](../architecture/concepts.md) to learn about Terraform, modules, and organizing resources. Change to your infrastructure repository (e.g. `infra`).
+Read [concepts](/architecture/concepts/) to learn about Terraform, modules, and organizing resources. Change to your infrastructure repository (e.g. `infra`).
 
 ```
 cd infra/clusters
@@ -141,30 +142,15 @@ Configure the Matchbox provider to use your Matchbox API endpoint and client cer
 
 ```tf
 provider "matchbox" {
+  version     = "0.3.0"
   endpoint    = "matchbox.example.com:8081"
   client_cert = "${file("~/.config/matchbox/client.crt")}"
   client_key  = "${file("~/.config/matchbox/client.key")}"
   ca          = "${file("~/.config/matchbox/ca.crt")}"
 }
 
-provider "local" {
-  version = "~> 1.0"
-  alias = "default"
-}
-
-provider "null" {
-  version = "~> 1.0"
-  alias = "default"
-}
-
-provider "template" {
-  version = "~> 1.0"
-  alias = "default"
-}
-
-provider "tls" {
-  version = "~> 1.0"
-  alias = "default"
+provider "ct" {
+  version = "0.4.0"
 }
 ```
 
@@ -174,14 +160,7 @@ Define a Kubernetes cluster using the module `bare-metal/container-linux/kuberne
 
 ```tf
 module "bare-metal-mercury" {
-  source = "git::https://github.com/poseidon/typhoon//bare-metal/container-linux/kubernetes?ref=v1.11.1"
-  
-  providers = {
-    local = "local.default"
-    null = "null.default"
-    template = "template.default"
-    tls = "tls.default"
-  }
+  source = "git::https://github.com/poseidon/typhoon//bare-metal/container-linux/kubernetes?ref=v1.15.3"
   
   # bare-metal
   cluster_name            = "mercury"
@@ -210,6 +189,9 @@ module "bare-metal-mercury" {
     "node2.example.com",
     "node3.example.com",
   ]
+
+  # set to http only if you cannot chainload to iPXE firmware with https support
+  # download_protocol = "http"
 }
 ```
 
@@ -283,9 +265,9 @@ Apply complete! Resources: 55 added, 0 changed, 0 destroyed.
 To watch the install to disk (until machines reboot from disk), SSH to port 2222.
 
 ```
-# before v1.11.1
+# before v1.15.3
 $ ssh debug@node1.example.com
-# after v1.11.1
+# after v1.15.3
 $ ssh -p 2222 core@node1.example.com
 ```
 
@@ -304,15 +286,15 @@ bootkube[5]: Tearing down temporary bootstrap control plane...
 
 ## Verify
 
-[Install kubectl](https://coreos.com/kubernetes/docs/latest/configure-kubectl.html) on your system. Use the generated `kubeconfig` credentials to access the Kubernetes cluster and list nodes.
+[Install kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/) on your system. Use the generated `kubeconfig` credentials to access the Kubernetes cluster and list nodes.
 
 ```
 $ export KUBECONFIG=/home/user/.secrets/clusters/mercury/auth/kubeconfig
 $ kubectl get nodes
-NAME                STATUS    AGE       VERSION
-node1.example.com   Ready     11m       v1.11.1
-node2.example.com   Ready     11m       v1.11.1
-node3.example.com   Ready     11m       v1.11.1
+NAME                STATUS  ROLES              AGE  VERSION
+node1.example.com   Ready   controller,master  10m  v1.15.3
+node2.example.com   Ready   node               10m  v1.15.3
+node3.example.com   Ready   node               10m  v1.15.3
 ```
 
 List the pods.
@@ -323,6 +305,7 @@ NAMESPACE     NAME                                       READY     STATUS    RES
 kube-system   calico-node-6qp7f                          2/2       Running   1          11m
 kube-system   calico-node-gnjrm                          2/2       Running   0          11m
 kube-system   calico-node-llbgt                          2/2       Running   0          11m
+kube-system   coredns-1187388186-dj3pd                   1/1       Running   0          11m
 kube-system   coredns-1187388186-mx9rt                   1/1       Running   0          11m
 kube-system   kube-apiserver-7336w                       1/1       Running   0          11m
 kube-system   kube-controller-manager-3271970485-b9chx   1/1       Running   0          11m
@@ -338,7 +321,7 @@ kube-system   pod-checkpointer-wf65d-node1.example.com   1/1       Running   0  
 
 ## Going Further
 
-Learn about [maintenance](../topics/maintenance.md) and [addons](../addons/overview.md).
+Learn about [maintenance](/topics/maintenance/) and [addons](/addons/overview/).
 
 !!! note
     On Container Linux clusters, install the `CLUO` addon to coordinate reboots and drains when nodes auto-update. Otherwise, updates may not be applied until the next reboot.
@@ -353,7 +336,7 @@ Check the [variables.tf](https://github.com/poseidon/typhoon/blob/master/bare-me
 |:-----|:------------|:--------|
 | cluster_name | Unique cluster name | mercury |
 | matchbox_http_endpoint | Matchbox HTTP read-only endpoint | http://matchbox.example.com:port |
-| os_channel | Channel for a Container Linux derivative | coreos-stable, coreos-beta, coreos-alpha, flatcar-stable, flatcar-beta, flatcar-alpha |
+| os_channel | Channel for a Container Linux derivative | coreos-stable, coreos-beta, coreos-alpha, flatcar-stable, flatcar-beta, flatcar-alpha, flatcar-edge |
 | os_version | Version for a Container Linux derivative to PXE and install | 1632.3.0 |
 | k8s_domain_name | FQDN resolving to the controller(s) nodes. Workers and kubectl will communicate with this endpoint | "myk8s.example.com" |
 | ssh_authorized_key | SSH public key for user 'core' | "ssh-rsa AAAAB3Nz..." |
@@ -369,10 +352,12 @@ Check the [variables.tf](https://github.com/poseidon/typhoon/blob/master/bare-me
 
 | Name | Description | Default | Example |
 |:-----|:------------|:--------|:--------|
-| cached_install | Whether machines should PXE boot and install from the Matchbox `/assets` cache. Admin MUST have downloaded Container Linux images into the cache to use this (coreos only for now) | false | true |
+| download_protocol | Protocol iPXE uses to download the kernel and initrd. iPXE must be compiled with [crypto](https://ipxe.org/crypto) support for https. Unused if cached_install is true | "https" | "http" |
+| cached_install | PXE boot and install from the Matchbox `/assets` cache. Admin MUST have downloaded Container Linux or Flatcar images into the cache | false | true |
 | install_disk | Disk device where Container Linux should be installed | "/dev/sda" | "/dev/sdb" |
 | networking | Choice of networking provider | "calico" | "calico" or "flannel" |
 | network_mtu | CNI interface MTU (calico-only) | 1480 | - | 
+| clc_snippets | Map from machine names to lists of Container Linux Config snippets | {} | [example](/advanced/customization/#usage) |
 | network_ip_autodetection_method | Method to detect host IPv4 address (calico-only) | first-found | can-reach=10.0.0.1 |
 | pod_cidr | CIDR IPv4 range to assign to Kubernetes pods | "10.2.0.0/16" | "10.22.0.0/16" |
 | service_cidr | CIDR IPv4 range to assign to Kubernetes services | "10.3.0.0/16" | "10.3.0.0/24" |

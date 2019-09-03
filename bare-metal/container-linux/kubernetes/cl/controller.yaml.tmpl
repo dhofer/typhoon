@@ -7,7 +7,7 @@ systemd:
         - name: 40-etcd-cluster.conf
           contents: |
             [Service]
-            Environment="ETCD_IMAGE_TAG=v3.3.8"
+            Environment="ETCD_IMAGE_TAG=v3.3.15"
             Environment="ETCD_NAME=${etcd_name}"
             Environment="ETCD_ADVERTISE_CLIENT_URLS=https://${domain_name}:2379"
             Environment="ETCD_INITIAL_ADVERTISE_PEER_URLS=https://${domain_name}:2380"
@@ -70,7 +70,12 @@ systemd:
           --mount volume=opt-cni-bin,target=/opt/cni/bin \
           --volume var-log,kind=host,source=/var/log \
           --mount volume=var-log,target=/var/log \
+          --volume iscsiconf,kind=host,source=/etc/iscsi/ \
+          --mount volume=iscsiconf,target=/etc/iscsi/ \
+          --volume iscsiadm,kind=host,source=/usr/sbin/iscsiadm \
+          --mount volume=iscsiadm,target=/sbin/iscsiadm \
           --insecure-options=image"
+        Environment=KUBELET_CGROUP_DRIVER=${cgroup_driver}
         ExecStartPre=/bin/mkdir -p /opt/cni/bin
         ExecStartPre=/bin/mkdir -p /etc/kubernetes/manifests
         ExecStartPre=/bin/mkdir -p /etc/kubernetes/cni/net.d
@@ -85,8 +90,9 @@ systemd:
           --anonymous-auth=false \
           --authentication-token-webhook \
           --authorization-mode=Webhook \
+          --cgroup-driver=$${KUBELET_CGROUP_DRIVER} \
           --client-ca-file=/etc/kubernetes/ca.crt \
-          --cluster_dns=${k8s_dns_service_ip} \
+          --cluster_dns=${cluster_dns_service_ip} \
           --cluster_domain=${cluster_domain_suffix} \
           --cni-conf-dir=/etc/kubernetes/cni/net.d \
           --exit-on-lock-contention \
@@ -97,6 +103,7 @@ systemd:
           --node-labels=node-role.kubernetes.io/master \
           --node-labels=node-role.kubernetes.io/controller="true" \
           --pod-manifest-path=/etc/kubernetes/manifests \
+          --read-only-port=0 \
           --register-with-taints=node-role.kubernetes.io/master=:NoSchedule \
           --volume-plugin-dir=/var/lib/kubelet/volumeplugins
         ExecStop=-/usr/bin/rkt stop --uuid-file=/var/cache/kubelet-pod.uuid
@@ -123,7 +130,7 @@ storage:
       contents:
         inline: |
           KUBELET_IMAGE_URL=docker://k8s.gcr.io/hyperkube
-          KUBELET_IMAGE_TAG=v1.11.1
+          KUBELET_IMAGE_TAG=v1.15.3
     - path: /etc/hostname
       filesystem: root
       mode: 0644
@@ -149,22 +156,17 @@ storage:
           set -e
           # Move experimental manifests
           [ -n "$(ls /opt/bootkube/assets/manifests-*/* 2>/dev/null)" ] && mv /opt/bootkube/assets/manifests-*/* /opt/bootkube/assets/manifests && rm -rf /opt/bootkube/assets/manifests-*
-          BOOTKUBE_ACI="$${BOOTKUBE_ACI:-quay.io/coreos/bootkube}"
-          BOOTKUBE_VERSION="$${BOOTKUBE_VERSION:-v0.12.0}"
-          BOOTKUBE_ASSETS="$${BOOTKUBE_ASSETS:-/opt/bootkube/assets}"
           exec /usr/bin/rkt run \
             --trust-keys-from-https \
-            --volume assets,kind=host,source=$BOOTKUBE_ASSETS \
+            --volume assets,kind=host,source=/opt/bootkube/assets \
             --mount volume=assets,target=/assets \
             --volume bootstrap,kind=host,source=/etc/kubernetes \
             --mount volume=bootstrap,target=/etc/kubernetes \
-            $$RKT_OPTS \
-            $${BOOTKUBE_ACI}:$${BOOTKUBE_VERSION} \
+            $${RKT_OPTS} \
+            quay.io/coreos/bootkube:v0.14.0 \
             --net=host \
             --dns=host \
             --exec=/bootkube -- start --asset-dir=/assets "$@"
-networkd:
-  ${networkd_content}
 passwd:
   users:
     - name: core

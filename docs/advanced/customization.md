@@ -19,7 +19,7 @@ Clusters are kept to a minimal Kubernetes control plane by offering components l
 
 Container Linux Configs (CLCs) declare how a Container Linux instance's disk should be provisioned on first boot from disk. CLCs define disk partitions, filesystems, files, systemd units, dropins, networkd configs, mount units, raid arrays, and users. Typhoon creates controller and worker instances with base Container Linux Configs to create a minimal, secure Kubernetes cluster on each platform.
 
-Typhoon AWS, Google Cloud, and Digital Ocean give users the ability to provide CLC *snippets* - valid Container Linux Configs that are validated and additively merged into the Typhoon base config during `terraform plan`. This allows advanced host customizations and experimentation.
+Typhoon AWS, Azure, bare-metal, DigitalOcean, and Google Cloud support CLC *snippets* - valid Container Linux Configs that are validated and additively merged into the Typhoon base config during `terraform plan`. This allows advanced host customizations and experimentation.
 
 #### Examples
 
@@ -69,7 +69,7 @@ View the Container Linux Config [format](https://coreos.com/os/docs/1576.4.0/con
 
 Write Container Linux Configs *snippets* as files in the repository where you keep Terraform configs for clusters (perhaps in a `clc` or `snippets` subdirectory). You may organize snippets in multiple files as desired, provided they are each valid.
 
-Define an [AWS](https://typhoon.psdn.io/aws/#cluster), [Google Cloud](https://typhoon.psdn.io/google-cloud/#cluster), or [Digital Ocean](https://typhoon.psdn.io/digital-ocean/#cluster) cluster and fill in the optional `controller_clc_snippets` or `worker_clc_snippets` fields.
+[AWS](/cl/aws/#cluster), [Azure](/cl/azure/#cluster), [DigitalOcean](/cl/digital-ocean/#cluster), and [Google Cloud](/cl/google-cloud/#cluster) clusters allow populating a list of `controller_clc_snippets` or `worker_clc_snippets`.
 
 ```
 module "digital-ocean-nemo" {
@@ -78,13 +78,34 @@ module "digital-ocean-nemo" {
   controller_count        = 1
   worker_count            = 2
   controller_clc_snippets = [
-    "${file("./custom-files")}",
-    "${file("./custom-units")}",
+    file("./custom-files"),
+    file("./custom-units"),
   ]
   worker_clc_snippets = [
-    "${file("./custom-files")}",
-    "${file("./custom-units")}",
+    file("./custom-files"),
+    file("./custom-units")",
   ]
+  ...
+}
+```
+
+[Bare-Metal](/cl/bare-metal/#cluster) clusters allow different Container Linux snippets to be used for each node (since hardware may be heterogeneous). Populate the optional `clc_snippets` map variable with any controller or worker name keys and lists of snippets.
+
+```
+module "bare-metal-mercury" {
+  ...
+  controller_names = ["node1"]
+  worker_names = [
+    "node2",
+    "node3",
+  ]
+  clc_snippets = {
+    "node2" = [file("./units/hello.yaml")]
+    "node3" = [
+      file("./units/world.yaml"),
+      file("./units/hello.yaml"),
+    ]
+  }
   ...
 }
 ```
@@ -113,11 +134,7 @@ $ terraform apply
 Container Linux Configs (and the CoreOS Ignition system) create immutable infrastructure. Disk provisioning is performed only on first boot from disk. That means if you change a snippet used by an instance, Terraform will (correctly) try to destroy and recreate that instance. Be careful!
 
 !!! danger
-    Destroying and recreating controller instances is destructive! etcd runs on controller instances and stores data there. Do not modify controller snippets. See [blue/green](https://typhoon.psdn.io/topics/maintenance/#upgrades) clusters.
-
-### Fedora Atomic
-
-Cloud-Init and kickstart (bare-metal only) declare how a Fedora Atomic instance should be provisioned. Customizing these declarations in ways beyond the provided Terraform variables is unsupported.
+    Destroying and recreating controller instances is destructive! etcd runs on controller instances and stores data there. Do not modify controller snippets. See [blue/green](/topics/maintenance/#upgrades) clusters.
 
 ## Architecture
 

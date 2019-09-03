@@ -8,7 +8,7 @@ Let's cover the concepts you'll need to get started.
 
 #### Nodes
 
-Cluster nodes provision themselves from a declarative configuration upfront. Nodes run a `kubelet` service and register themselves with the control plane to join the higher order cluster. All nodes run `kube-proxy` and `calico` or `flannel` pods.
+All cluster nodes provision themselves from a declarative configuration upfront. Nodes run a `kubelet` service and register themselves with the control plane to join the cluster. All nodes run `kube-proxy` and `calico` or `flannel` pods.
 
 #### Controllers
 
@@ -69,7 +69,7 @@ Module versioning ensures `terraform get --update` only fetches the desired vers
 
 Maintain Terraform configs for "live" infrastructure in a versioned repository. Seek to organize configs to reflect resources that should be managed together in a `terraform apply` invocation.
 
-You may choose to organize resources all together, by team, by project, or some other scheme. Here's an example that manages four clusters together:
+You may choose to organize resources all together, by team, by project, or some other scheme. Here's an example that manages clusters together:
 
 ```sh
 .git/
@@ -77,6 +77,7 @@ infra/
 └── terraform
     └── clusters
         ├── aws-tempest.tf
+        ├── azure-ramius.tf
         ├── bare-metal-mercury.tf
         ├── google-cloud-yavin.tf
         ├── digital-ocean-nemo.tf

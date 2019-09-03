@@ -1,6 +1,6 @@
 # Google Cloud
 
-In this tutorial, we'll create a Kubernetes v1.11.1 cluster on Google Compute Engine with Container Linux.
+In this tutorial, we'll create a Kubernetes v1.15.3 cluster on Google Compute Engine with Container Linux.
 
 We'll declare a Kubernetes cluster using the Typhoon Terraform module. Then apply the changes to create a network, firewall rules, health checks, controller instances, worker managed instance group, load balancers, and TLS assets.
 
@@ -10,34 +10,26 @@ Controllers are provisioned to run an `etcd-member` peer and a `kubelet` service
 
 * Google Cloud Account and Service Account
 * Google Cloud DNS Zone (registered Domain Name or delegated subdomain)
-* Terraform v0.11.x and [terraform-provider-ct](https://github.com/coreos/terraform-provider-ct) installed locally
+* Terraform v0.12.x and [terraform-provider-ct](https://github.com/poseidon/terraform-provider-ct) installed locally
 
 ## Terraform Setup
 
-Install [Terraform](https://www.terraform.io/downloads.html) v0.11.x on your system.
+Install [Terraform](https://www.terraform.io/downloads.html) v0.12.x on your system.
 
 ```sh
 $ terraform version
-Terraform v0.11.1
+Terraform v0.12.7
 ```
 
-Add the [terraform-provider-ct](https://github.com/coreos/terraform-provider-ct) plugin binary for your system.
+Add the [terraform-provider-ct](https://github.com/poseidon/terraform-provider-ct) plugin binary for your system to `~/.terraform.d/plugins/`, noting the final name.
 
 ```sh
-wget https://github.com/coreos/terraform-provider-ct/releases/download/v0.2.1/terraform-provider-ct-v0.2.1-linux-amd64.tar.gz
-tar xzf terraform-provider-ct-v0.2.1-linux-amd64.tar.gz
-sudo mv terraform-provider-ct-v0.2.1-linux-amd64/terraform-provider-ct /usr/local/bin/
+wget https://github.com/poseidon/terraform-provider-ct/releases/download/v0.4.0/terraform-provider-ct-v0.4.0-linux-amd64.tar.gz
+tar xzf terraform-provider-ct-v0.4.0-linux-amd64.tar.gz
+mv terraform-provider-ct-v0.4.0-linux-amd64/terraform-provider-ct ~/.terraform.d/plugins/terraform-provider-ct_v0.4.0
 ```
 
-Add the plugin to your `~/.terraformrc`.
-
-```
-providers {
-  ct = "/usr/local/bin/terraform-provider-ct"
-}
-```
-
-Read [concepts](../architecture/concepts.md) to learn about Terraform, modules, and organizing resources. Change to your infrastructure repository (e.g. `infra`).
+Read [concepts](/architecture/concepts/) to learn about Terraform, modules, and organizing resources. Change to your infrastructure repository (e.g. `infra`).
 
 ```
 cd infra/clusters
@@ -47,7 +39,7 @@ cd infra/clusters
 
 Login to your Google Console [API Manager](https://console.cloud.google.com/apis/dashboard) and select a project, or [signup](https://cloud.google.com/free/) if you don't have an account.
 
-Select "Credentials" and create a service account key. Choose the "Compute Engine Admin" role and save the JSON private key to a file that can be referenced in configs.
+Select "Credentials" and create a service account key. Choose the "Compute Engine Admin" and "DNS Administrator" roles and save the JSON private key to a file that can be referenced in configs.
 
 ```sh
 mv ~/Downloads/project-id-43048204.json ~/.config/google-cloud/terraform.json
@@ -57,32 +49,14 @@ Configure the Google Cloud provider to use your service account key, project-id,
 
 ```tf
 provider "google" {
-  version = "1.6"
-  alias   = "default"
-
-  credentials = "${file("~/.config/google-cloud/terraform.json")}"
+  version     = "2.13.0"
   project     = "project-id"
   region      = "us-central1"
+  credentials = "${file("~/.config/google-cloud/terraform.json")}"
 }
 
-provider "local" {
-  version = "~> 1.0"
-  alias = "default"
-}
-
-provider "null" {
-  version = "~> 1.0"
-  alias = "default"
-}
-
-provider "template" {
-  version = "~> 1.0"
-  alias = "default"
-}
-
-provider "tls" {
-  version = "~> 1.0"
-  alias = "default"
+provider "ct" {
+  version = "0.4.0"
 }
 ```
 
@@ -97,15 +71,7 @@ Define a Kubernetes cluster using the module `google-cloud/container-linux/kuber
 
 ```tf
 module "google-cloud-yavin" {
-  source = "git::https://github.com/poseidon/typhoon//google-cloud/container-linux/kubernetes?ref=v1.11.1"
-  
-  providers = {
-    google   = "google.default"
-    local    = "local.default"
-    null     = "null.default"
-    template = "template.default"
-    tls      = "tls.default"
-  }
+  source = "git::https://github.com/poseidon/typhoon//google-cloud/container-linux/kubernetes?ref=v1.15.3"
 
   # Google Cloud
   cluster_name  = "yavin"
@@ -166,15 +132,15 @@ In 4-8 minutes, the Kubernetes cluster will be ready.
 
 ## Verify
 
-[Install kubectl](https://coreos.com/kubernetes/docs/latest/configure-kubectl.html) on your system. Use the generated `kubeconfig` credentials to access the Kubernetes cluster and list nodes.
+[Install kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/) on your system. Use the generated `kubeconfig` credentials to access the Kubernetes cluster and list nodes.
 
 ```
 $ export KUBECONFIG=/home/user/.secrets/clusters/yavin/auth/kubeconfig
 $ kubectl get nodes
-NAME                                          STATUS   AGE    VERSION
-yavin-controller-0.c.example-com.internal     Ready    6m     v1.11.1
-yavin-worker-jrbf.c.example-com.internal      Ready    5m     v1.11.1
-yavin-worker-mzdm.c.example-com.internal      Ready    5m     v1.11.1
+NAME                                       ROLES              STATUS  AGE  VERSION
+yavin-controller-0.c.example-com.internal  controller,master  Ready   6m   v1.15.3
+yavin-worker-jrbf.c.example-com.internal   node               Ready   5m   v1.15.3
+yavin-worker-mzdm.c.example-com.internal   node               Ready   5m   v1.15.3
 ```
 
 List the pods.
@@ -185,6 +151,7 @@ NAMESPACE     NAME                                      READY  STATUS    RESTART
 kube-system   calico-node-1cs8z                         2/2    Running   0         6m
 kube-system   calico-node-d1l5b                         2/2    Running   0         6m
 kube-system   calico-node-sp9ps                         2/2    Running   0         6m
+kube-system   coredns-1187388186-dkh3o                  1/1    Running   0         6m
 kube-system   coredns-1187388186-zj5dl                  1/1    Running   0         6m
 kube-system   kube-apiserver-zppls                      1/1    Running   0         6m
 kube-system   kube-controller-manager-3271970485-gh9kt  1/1    Running   0         6m
@@ -199,7 +166,7 @@ kube-system   pod-checkpointer-l6lrt                    1/1    Running   0      
 
 ## Going Further
 
-Learn about [maintenance](../topics/maintenance.md) and [addons](../addons/overview.md).
+Learn about [maintenance](/topics/maintenance/) and [addons](/addons/overview/).
 
 !!! note
     On Container Linux clusters, install the `CLUO` addon to coordinate reboots and drains when nodes auto-update. Otherwise, updates may not be applied until the next reboot.
@@ -249,8 +216,8 @@ resource "google_dns_managed_zone" "zone-for-clusters" {
 | os_image | Container Linux image for compute instances | "coreos-stable" | "coreos-stable-1632-3-0-v20180215" |
 | disk_size | Size of the disk in GB | 40 | 100 |
 | worker_preemptible | If enabled, Compute Engine will terminate workers randomly within 24 hours | false | true |
-| controller_clc_snippets | Controller Container Linux Config snippets | [] | |
-| worker_clc_snippets | Worker Container Linux Config snippets | [] | |
+| controller_clc_snippets | Controller Container Linux Config snippets | [] | [example](/advanced/customization/) |
+| worker_clc_snippets | Worker Container Linux Config snippets | [] | [example](/advanced/customization/) |
 | networking | Choice of networking provider | "calico" | "calico" or "flannel" |
 | pod_cidr | CIDR IPv4 range to assign to Kubernetes pods | "10.2.0.0/16" | "10.22.0.0/16" |
 | service_cidr | CIDR IPv4 range to assign to Kubernetes services | "10.3.0.0/16" | "10.3.0.0/24" |
@@ -260,5 +227,5 @@ Check the list of valid [machine types](https://cloud.google.com/compute/docs/ma
 
 #### Preemption
 
-Add `worker_preemeptible = "true"` to allow worker nodes to be [preempted](https://cloud.google.com/compute/docs/instances/preemptible) at random, but pay [significantly](https://cloud.google.com/compute/pricing) less. Clusters tolerate stopping instances fairly well (reschedules pods, but cannot drain) and preemption provides a nice reward for running fault-tolerant cluster systems.`
+Add `worker_preemptible = "true"` to allow worker nodes to be [preempted](https://cloud.google.com/compute/docs/instances/preemptible) at random, but pay [significantly](https://cloud.google.com/compute/pricing) less. Clusters tolerate stopping instances fairly well (reschedules pods, but cannot drain) and preemption provides a nice reward for running fault-tolerant cluster systems.`
 
