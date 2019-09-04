@@ -40,7 +40,7 @@ resource "hcloud_server" "workers" {
 
   provisioner "remote-exec" {
     inline = [
-      "apt-get install -y dc",
+      "apt-get install -y dc gawk",
       "wget https://raw.githubusercontent.com/coreos/coreos-installer/master/coreos-installer",
       "chmod +x coreos-installer",
       "./coreos-installer -d sda -i /tmp/ignition.ign -b ${var.fcos_image}",
@@ -88,5 +88,6 @@ data "template_file" "worker-configs" {
     cluster_domain_suffix  = var.cluster_domain_suffix
     ssh_authorized_key     = var.ssh_authorized_key
     hostname               = "${var.cluster_name}-worker-${count.index}"
+    private_ip             = cidrhost("10.1.0.0/24", count.index + 100)
   }
 }

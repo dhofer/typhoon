@@ -14,10 +14,12 @@ resource "hcloud_server_network" "controllers" {
   count = var.controller_count
   network_id = hcloud_network.network.id
   server_id = element(hcloud_server.controllers.*.id, count.index)
+  ip = cidrhost("10.1.0.0/24", count.index + 10)
 }
 
 resource "hcloud_server_network" "workers" {
+  count = length(hcloud_server.workers)
   network_id = hcloud_network.network.id
   server_id = element(hcloud_server.workers.*.id, count.index)
-  count = length(hcloud_server.workers)
+  ip = cidrhost("10.1.0.0/24", count.index + 100)
 }

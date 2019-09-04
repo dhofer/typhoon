@@ -63,11 +63,14 @@ systemd:
           --cni-conf-dir=/etc/kubernetes/cni/net.d \
           --exit-on-lock-contention \
           --kubeconfig=/etc/kubernetes/kubeconfig \
+          --kubelet-cgroups=/systemd/system.slice \
           --lock-file=/var/run/lock/kubelet.lock \
           --network-plugin=cni \
+          --node-ip=${private_ip} \
           --node-labels=node-role.kubernetes.io/node \
           --pod-manifest-path=/etc/kubernetes/manifests \
           --read-only-port=0 \
+          --runtime-cgroups=/systemd/system.slice \
           --volume-plugin-dir=/var/lib/kubelet/volumeplugins
         ExecStop=-/usr/bin/podman stop kubelet
         Delegate=yes
