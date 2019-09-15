@@ -83,7 +83,7 @@ data "template_file" "worker-configs" {
   template = file("${path.module}/fcc/worker.yaml")
 
   vars = {
-    kubeconfig             = indent(10, module.bootkube.kubeconfig-kubelet)
+    kubeconfig             = indent(10, module.bootstrap.kubeconfig-kubelet)
     cluster_dns_service_ip = cidrhost(var.service_cidr, 10)
     cluster_domain_suffix  = var.cluster_domain_suffix
     ssh_authorized_key     = var.ssh_authorized_key
