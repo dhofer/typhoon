@@ -56,6 +56,7 @@ systemd:
           --authorization-mode=Webhook \
           --cgroup-driver=systemd \
           --cgroups-per-qos=true \
+          --cloud-provider=external \
           --enforce-node-allocatable="pods" \
           --client-ca-file=/etc/kubernetes/ca.crt \
           --cluster_dns=${cluster_dns_service_ip} \
@@ -76,6 +77,32 @@ systemd:
         Delegate=yes
         Restart=always
         RestartSec=10
+        [Install]
+        WantedBy=multi-user.target
+    - name: iptables-restore.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=IPv4 firewall with iptables
+        After=network.target
+        Before=kubelet.service
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        ExecStart=/usr/bin/bash -c "/usr/sbin/iptables-restore -w < /etc/sysconfig/iptables"
+        [Install]
+        WantedBy=multi-user.target
+    - name: ip6tables-restore.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=IPv6 firewall with iptables
+        After=network.target
+        Before=kubelet.service
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        ExecStart=/usr/bin/bash -c "/usr/sbin/ip6tables-restore -w < /etc/sysconfig/ip6tables"
         [Install]
         WantedBy=multi-user.target
     - name: getty@tty1.service
@@ -139,6 +166,63 @@ storage:
           dns=1.1.1.1;1.0.0.1
           ignore-auto-dns=true
           method=auto
+    - path: /etc/sysconfig/iptables
+      mode: 0600
+      overwrite: true
+      contents:
+        inline: |
+          *filter
+          :INPUT ACCEPT [0:0]
+          :FORWARD ACCEPT [0:0]
+          :OUTPUT ACCEPT [0:0]
+          -A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
+          -A INPUT -p icmp -j ACCEPT
+          -A INPUT -i lo -j ACCEPT
+          -A INPUT -i eth0 -p tcp --dport 22 -j ACCEPT
+          -A INPUT -i eth0 -p tcp --dport 80 -j ACCEPT
+          -A INPUT -i eth0 -p tcp --dport 443 -j ACCEPT
+          -A INPUT -i eth1 -p tcp --dport 2379 -j ACCEPT
+          -A INPUT -i eth1 -p tcp --dport 2380 -j ACCEPT
+          -A INPUT -i eth1 -p tcp --dport 2381 -j ACCEPT
+          -A INPUT -i eth1 -p udp --dport 4789 -j ACCEPT
+          -A INPUT -i eth0 -p tcp --dport 6443 -j ACCEPT
+          -A INPUT -i eth1 -p tcp --dport 9100 -j ACCEPT
+          -A INPUT -i eth1 -p tcp --dport 10250 -j ACCEPT
+          -A INPUT -i eth1 -p tcp --dport 10251 -j ACCEPT
+          -A INPUT -i eth1 -p tcp --dport 10252 -j ACCEPT
+          -A INPUT -i eth0 -p tcp --dport 10254 -j ACCEPT
+          -A INPUT -j REJECT --reject-with icmp-host-prohibited
+          -A FORWARD -j REJECT --reject-with icmp-host-prohibited
+          COMMIT
+    - path: /etc/sysconfig/ip6tables
+      mode: 0600
+      overwrite: true
+      contents:
+        inline: |
+          *filter
+          :INPUT ACCEPT [0:0]
+          :FORWARD ACCEPT [0:0]
+          :OUTPUT ACCEPT [0:0]
+          -A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
+          -A INPUT -p ipv6-icmp -j ACCEPT
+          -A INPUT -i lo -j ACCEPT
+          -A INPUT -i eth0 -p tcp --dport 22 -j ACCEPT
+          -A INPUT -i eth0 -p tcp --dport 80 -j ACCEPT
+          -A INPUT -i eth0 -p tcp --dport 443 -j ACCEPT
+          -A INPUT -i eth1 -p tcp --dport 2379 -j ACCEPT
+          -A INPUT -i eth1 -p tcp --dport 2380 -j ACCEPT
+          -A INPUT -i eth1 -p tcp --dport 2381 -j ACCEPT
+          -A INPUT -i eth1 -p udp --dport 4789 -j ACCEPT
+          -A INPUT -i eth0 -p tcp --dport 6443 -j ACCEPT
+          -A INPUT -i eth1 -p tcp --dport 9100 -j ACCEPT
+          -A INPUT -i eth1 -p tcp --dport 10250 -j ACCEPT
+          -A INPUT -i eth1 -p tcp --dport 10251 -j ACCEPT
+          -A INPUT -i eth1 -p tcp --dport 10252 -j ACCEPT
+          -A INPUT -i eth0 -p tcp --dport 10254 -j ACCEPT
+          -A INPUT -d fe80::/64 -p udp -m udp --dport 546 -m state --state NEW -j ACCEPT
+          -A INPUT -j REJECT --reject-with icmp6-adm-prohibited
+          -A FORWARD -j REJECT --reject-with icmp6-adm-prohibited
+          COMMIT
 passwd:
   users:
     - name: core
